@@ -6,7 +6,7 @@
 /*   By: danslav1e <danslav1e@student.42.fr>        +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/06 22:25:20 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/07/20 18:22:11 by danslav1e        ###   ########.fr       */
+/*   Updated: 2026/07/22 21:34:37 by danslav1e        ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -56,6 +56,7 @@ class Server //-> class for server
 		void BroadcastToChannel( Channel& channel, const std::string& message, int exceptFd );
 		void ProcessLine( Client& client, const std::string& line );
 		void MaybeRegisterClient( Client& client );
+		void SendWelcomeMessages( Client& client );
 };
 
 #endif

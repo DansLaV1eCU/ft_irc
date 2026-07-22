@@ -6,7 +6,7 @@
 /*   By: danslav1e <danslav1e@student.42.fr>        +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 20:46:27 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/07/21 22:02:35 by danslav1e        ###   ########.fr       */
+/*   Updated: 2026/07/22 21:47:49 by danslav1e        ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -238,189 +238,390 @@ void Server::MaybeRegisterClient( Client &client ) {
 	}
 }
 
-void Server::ProcessLine( Client &client, const std::string &line ) {
-	std::string clean = TrimCarriageReturn(line);
-	std::vector<std::string> tokens = SplitWords(clean);
-	
+void Server::ProcessLine( Client& client, const std::string& line ) {
+	std::string cleanLine = TrimCarriageReturn( line );
+	std::vector<std::string> tokens = SplitWords( cleanLine );
+
 	if ( tokens.empty() ) {
 		return ;
 	}
 
-	const std::string &command = tokens[0];
+	std::string command = tokens[0];
+	bool wasRegistered = client.IsRegistered();
+
 	if ( command == "PASS" ) {
-		if ( tokens.size() >= 2 && tokens[1] == _password ) {
-			client.SetPassAccepted(true);
-			SendToClient(client.GetFd(), ":server NOTICE * :Password accepted\r\n");
+		if ( tokens.size() < 2 ) {
+			SendToClient(client.GetFd(), ":server 461 * PASS :Not enough parameters\r\n");
+			return ;
+		}
+		if ( tokens[1] == _password ) {
+			client.SetPassAccepted( true );
 		} else {
 			SendToClient(client.GetFd(), ":server 464 * :Password incorrect\r\n");
 		}
 	} else if ( command == "NICK" ) {
-		if ( tokens.size() >= 2 ) {
-			if (FindClientByNick(tokens[1]) != NULL && client.GetNickname() != tokens[1]) {
-				SendToClient(client.GetFd(), ":server 433 * " + tokens[1] + " :Nickname is already in use\r\n");
-			} else {
-				client.SetNickname(tokens[1]);
-				client.SetNickAccepted(true);
-				MaybeRegisterClient(client);
-			}
+		if ( tokens.size() < 2 ) {
+			SendToClient(client.GetFd(), ":server 431 * :No nickname given\r\n");
+			return ;
 		}
+		if ( FindClientByNick( tokens[1] ) != NULL ) {
+			SendToClient(client.GetFd(), ":server 433 * " + tokens[1] + " :Nickname is already in use\r\n");
+			return ;
+		}
+		client.SetNickname( tokens[1] );
+		client.SetNickAccepted( true );
 	} else if ( command == "USER" ) {
-		if ( tokens.size() >= 5 ) {
-			client.SetUsername(tokens[1]);
-			client.SetUserAccepted(true);
-			std::string realname = clean;
-			size_t colon = realname.find(':');
-			if ( colon != std::string::npos ) {
-				realname = realname.substr(colon + 1);
-			}
-			client.SetRealname(realname);
-			MaybeRegisterClient(client);
+		if ( tokens.size() < 5 ) {
+			SendToClient(client.GetFd(), ":server 461 * USER :Not enough parameters\r\n");
+			return ;
 		}
+		client.SetUsername( tokens[1] );
+		client.SetRealname( JoinFrom(tokens, 4) );
+		client.SetUserAccepted( true );
+	} else if ( !client.IsRegistered() ) {
+		SendToClient(client.GetFd(), ":server 451 * :You have not registered\r\n");
+		return ;
+	} else if ( command == "PING" ) {
+		if ( tokens.size() < 2 ) {
+			SendToClient(client.GetFd(), ":server 461 " + client.GetNickname() + " PING :Not enough parameters\r\n");
+			return ;
+		}
+		SendToClient(client.GetFd(), "PONG " + tokens[1] + "\r\n");
 	} else if ( command == "JOIN" ) {
-		if ( !client.IsRegistered() || tokens.size() < 2 ) {
+		if ( tokens.size() < 2 ) {
+			SendToClient(client.GetFd(), ":server 461 " + client.GetNickname() + " JOIN :Not enough parameters\r\n");
 			return ;
 		}
-		std::string channelName = tokens[1];
-		std::string providedKey = tokens.size() >= 3 ? tokens[2] : "";
-		if ( !StartsWith(channelName, "#") ) {
+		std::string chanName = tokens[1];
+		std::string key = tokens.size() >= 3 ? tokens[2] : "";
+
+		if ( chanName.empty() || chanName[0] != '#' ) {
+			SendToClient(client.GetFd(), ":server 403 " + client.GetNickname() + " " + chanName + " :No such channel\r\n");
 			return ;
 		}
-		Channel *channel = FindChannel(channelName);
+
+		Channel* channel = FindChannel( chanName );
+		std::string joinMsg = ":" + client.GetNickname() + "!" + client.GetUsername() + "@" + client.GetIpAddress() + " JOIN " + chanName + "\r\n";
+
 		if ( channel == NULL ) {
-			channels.push_back(Channel(channelName, client.GetFd()));
-			channel = &channels.back();
+			Channel newChan(chanName, client.GetFd());
+			if ( !key.empty() ) {
+				newChan.SetKey( key );
+			}
+			channels.push_back( newChan );
+			channel = FindChannel( chanName );
+
+			SendToClient(client.GetFd(), joinMsg);
+			SendToClient(client.GetFd(), ":server 353 " + client.GetNickname() + " = " + chanName + " :@" + client.GetNickname() + "\r\n");
+			SendToClient(client.GetFd(), ":server 366 " + client.GetNickname() + " " + chanName + " :End of /NAMES list.\r\n");
+		} else {
+			if ( channel->HasMember( client.GetFd() ) ) {
+				return ;
+			}
+			if ( channel->IsInviteOnly() && !channel->IsInvited( client.GetNickname() ) ) {
+				SendToClient(client.GetFd(), ":server 473 " + client.GetNickname() + " " + chanName + " :Cannot join channel (+i)\r\n");
+				return ;
+			}
+			if ( !channel->GetKey().empty() && channel->GetKey() != key ) {
+				SendToClient(client.GetFd(), ":server 475 " + client.GetNickname() + " " + chanName + " :Cannot join channel (+k)\r\n");
+				return ;
+			}
+			if ( channel->IsFull() ) {
+				SendToClient(client.GetFd(), ":server 471 " + client.GetNickname() + " " + chanName + " :Cannot join channel (+l)\r\n");
+				return ;
+			}
+
+			channel->AddMember( client.GetFd(), false );
+			BroadcastToChannel(*channel, joinMsg, -1);
+
+			if ( !channel->GetTopic().empty() ) {
+				SendToClient(client.GetFd(), ":server 332 " + client.GetNickname() + " " + chanName + " :" + channel->GetTopic() + "\r\n");
+			}
+
+			std::string namesList = "";
+			const std::vector<int>& members = channel->GetMembers();
+			for ( size_t i = 0; i < members.size(); ++i ) {
+				Client* memberClient = FindClientByFd( members[i] );
+				if ( memberClient != NULL ) {
+					if ( i > 0 ) {
+						namesList += " ";
+					}
+					if ( channel->IsOperator( members[i] ) ) {
+						namesList += "@";
+					}
+					namesList += memberClient->GetNickname();
+				}
+			}
+			SendToClient(client.GetFd(), ":server 353 " + client.GetNickname() + " = " + chanName + " :" + namesList + "\r\n");
+			SendToClient(client.GetFd(), ":server 366 " + client.GetNickname() + " " + chanName + " :End of /NAMES list.\r\n");
 		}
-		if ( channel->IsInviteOnly() && !channel->IsInvited(client.GetNickname()) ) {
-			SendToClient(client.GetFd(), ":server 473 " + client.GetNickname() + " " + channelName + " :Cannot join channel (+i)\r\n");
+	} else if ( command == "PART" ) {
+		if ( tokens.size() < 2 ) {
+			SendToClient(client.GetFd(), ":server 461 " + client.GetNickname() + " PART :Not enough parameters\r\n");
 			return ;
 		}
-		if ( channel->IsFull() && !channel->HasMember(client.GetFd()) ) {
-			SendToClient(client.GetFd(), ":server 471 " + client.GetNickname() + " " + channelName + " :Cannot join channel (+l)\r\n");
+		std::string chanName = tokens[1];
+		Channel* channel = FindChannel( chanName );
+		if ( channel == NULL ) {
+			SendToClient(client.GetFd(), ":server 403 " + client.GetNickname() + " " + chanName + " :No such channel\r\n");
 			return ;
 		}
-		if ( !channel->GetKey().empty() && channel->GetKey() != providedKey ) {
-			SendToClient(client.GetFd(), ":server 475 " + client.GetNickname() + " " + channelName + " :Cannot join channel (+k)\r\n");
+		if ( !channel->HasMember( client.GetFd() ) ) {
+			SendToClient(client.GetFd(), ":server 442 " + client.GetNickname() + " " + chanName + " :You're not on that channel\r\n");
 			return ;
-		} else if ( !channel->HasMember(client.GetFd()) ) {
-			channel->AddMember(client.GetFd(), false);
 		}
-		BroadcastToChannel(*channel, ":" + client.GetNickname() + "!" + client.GetUsername() + "@server JOIN " + channelName + "\r\n", -1);
+		std::string reason = tokens.size() > 2 ? JoinFrom(tokens, 2) : "Leaving";
+		if ( StartsWith(reason, ":") ) {
+			reason = reason.substr(1);
+		}
+		std::string partMsg = ":" + client.GetNickname() + "!" + client.GetUsername() + "@" + client.GetIpAddress() + " PART " + chanName + " :" + reason + "\r\n";
+		BroadcastToChannel(*channel, partMsg, -1);
+		channel->RemoveMember( client.GetFd() );
+		RemoveEmptyChannel( chanName );
 	} else if ( command == "PRIVMSG" ) {
-		if ( !client.IsRegistered() || tokens.size() < 3 ) {
+		if ( tokens.size() < 3 ) {
+			SendToClient(client.GetFd(), ":server 461 " + client.GetNickname() + " PRIVMSG :Not enough parameters\r\n");
 			return ;
 		}
 		std::string target = tokens[1];
-		size_t colon = clean.find(':');
-		std::string message = colon == std::string::npos ? JoinFrom(tokens, 2)
-														 : clean.substr(colon + 1);
-		if ( StartsWith(target, "#") ) {
-			Channel *channel = FindChannel(target);
-			if ( channel != NULL ) {
-				BroadcastToChannel(*channel, ":" + client.GetNickname() + " PRIVMSG " + target + " :" + message + "\r\n", client.GetFd());
-			}
-		} else {
-			Client *targetClient = FindClientByNick(target);
-			if ( targetClient != NULL ) {
-				SendToClient(targetClient->GetFd(), ":" + client.GetNickname() + " PRIVMSG " + target + " :" + message + "\r\n");
-			}
+		std::string message = JoinFrom(tokens, 2);
+		if ( StartsWith(message, ":") ) {
+			message = message.substr(1);
 		}
-	} else if ( command == "TOPIC" ) {
-		if ( tokens.size() < 2 ) {
-			return ;
-		}
-		Channel *channel = FindChannel(tokens[1]);
-		if ( channel == NULL ) {
-			return ;
-		}
-		if ( tokens.size() >= 3 ) {
-			if (channel->IsTopicRestricted() && !channel->IsOperator( client.GetFd() )) {
-				SendToClient(client.GetFd(), ":server 482 " + client.GetNickname() + " " + channel->GetName() + " :You're not channel operator\r\n");
+		std::string fullMsg = ":" + client.GetNickname() + "!" + client.GetUsername() + "@" + client.GetIpAddress() + " PRIVMSG " + target + " :" + message + "\r\n";
+
+		if ( target[0] == '#' ) {
+			Channel* channel = FindChannel( target );
+			if ( channel == NULL ) {
+				SendToClient(client.GetFd(), ":server 403 " + client.GetNickname() + " " + target + " :No such channel\r\n");
 				return ;
 			}
-			channel->SetTopic(JoinFrom(tokens, 2));
-			BroadcastToChannel(*channel, ":server TOPIC " + channel->GetName() + " :" + channel->GetTopic() + "\r\n", -1);
-		} else {
-			SendToClient(client.GetFd(), ":server 332 " + client.GetNickname() + " " + channel->GetName() + " :" + channel->GetTopic() + "\r\n");
-		}
-	} else if ( command == "INVITE" ) {
-		if ( tokens.size() < 3 ) {
-			return ;
-		}
-		Channel *channel = FindChannel(tokens[2]);
-		Client *target = FindClientByNick(tokens[1]);
-		if ( channel != NULL && target != NULL ) {
-			if ( !channel->IsOperator(client.GetFd()) ) {
-				SendToClient(client.GetFd(), ":server 482 " + client.GetNickname() + " " + channel->GetName() + " :You're not channel operator\r\n");
+			if ( !channel->HasMember( client.GetFd() ) ) {
+				SendToClient(client.GetFd(), ":server 404 " + client.GetNickname() + " " + target + " :Cannot send to channel\r\n");
 				return ;
 			}
-			channel->Invite(target->GetNickname());
-			SendToClient(target->GetFd(), ":server INVITE " + target->GetNickname() + " " + channel->GetName() + "\r\n");
+			BroadcastToChannel(*channel, fullMsg, client.GetFd());
+		} else {
+			Client* targetClient = FindClientByNick( target );
+			if ( targetClient == NULL ) {
+				SendToClient(client.GetFd(), ":server 401 " + client.GetNickname() + " " + target + " :No such nick/channel\r\n");
+				return ;
+			}
+			SendToClient(targetClient->GetFd(), fullMsg);
 		}
 	} else if ( command == "KICK" ) {
 		if ( tokens.size() < 3 ) {
+			SendToClient(client.GetFd(), ":server 461 " + client.GetNickname() + " KICK :Not enough parameters\r\n");
 			return ;
 		}
-		Channel *channel = FindChannel(tokens[1]);
-		Client *target = FindClientByNick(tokens[2]);
-		if ( channel != NULL && target != NULL ) {
-			if ( !channel->IsOperator(client.GetFd()) ) {
-				SendToClient(client.GetFd(), ":server 482 " + client.GetNickname() + " " + channel->GetName() + " :You're not channel operator\r\n");
+		std::string chanName = tokens[1];
+		std::string targetNick = tokens[2];
+		std::string reason = tokens.size() > 3 ? JoinFrom(tokens, 3) : "Kicked by operator";
+		if ( StartsWith(reason, ":") ) {
+			reason = reason.substr(1);
+		}
+
+		Channel* channel = FindChannel( chanName );
+		if ( channel == NULL ) {
+			SendToClient(client.GetFd(), ":server 403 " + client.GetNickname() + " " + chanName + " :No such channel\r\n");
+			return ;
+		}
+		if ( !channel->IsOperator( client.GetFd() ) ) {
+			SendToClient(client.GetFd(), ":server 482 " + client.GetNickname() + " " + chanName + " :You're not channel operator\r\n");
+			return ;
+		}
+		Client* targetClient = FindClientByNick( targetNick );
+		if ( targetClient == NULL || !channel->HasMember( targetClient->GetFd() ) ) {
+			SendToClient(client.GetFd(), ":server 441 " + client.GetNickname() + " " + targetNick + " " + chanName + " :They isn't on that channel\r\n");
+			return ;
+		}
+
+		std::string kickMsg = ":" + client.GetNickname() + "!" + client.GetUsername() + "@" + client.GetIpAddress() + " KICK " + chanName + " " + targetNick + " :" + reason + "\r\n";
+		BroadcastToChannel(*channel, kickMsg, -1);
+		channel->RemoveMember( targetClient->GetFd() );
+		RemoveEmptyChannel( chanName );
+	} else if ( command == "INVITE" ) {
+		if ( tokens.size() < 3 ) {
+			SendToClient(client.GetFd(), ":server 461 " + client.GetNickname() + " INVITE :Not enough parameters\r\n");
+			return ;
+		}
+		std::string targetNick = tokens[1];
+		std::string chanName = tokens[2];
+
+		Client* targetClient = FindClientByNick( targetNick );
+		if ( targetClient == NULL ) {
+			SendToClient(client.GetFd(), ":server 401 " + client.GetNickname() + " " + targetNick + " :No such nick/channel\r\n");
+			return ;
+		}
+		Channel* channel = FindChannel( chanName );
+		if ( channel == NULL ) {
+			SendToClient(client.GetFd(), ":server 403 " + client.GetNickname() + " " + chanName + " :No such channel\r\n");
+			return ;
+		}
+		if ( !channel->HasMember( client.GetFd() ) ) {
+			SendToClient(client.GetFd(), ":server 442 " + client.GetNickname() + " " + chanName + " :You're not on that channel\r\n");
+			return ;
+		}
+		if ( channel->IsInviteOnly() && !channel->IsOperator( client.GetFd() ) ) {
+			SendToClient(client.GetFd(), ":server 482 " + client.GetNickname() + " " + chanName + " :You're not channel operator\r\n");
+			return ;
+		}
+		if ( channel->HasMember( targetClient->GetFd() ) ) {
+			SendToClient(client.GetFd(), ":server 443 " + client.GetNickname() + " " + targetNick + " " + chanName + " :is already on channel\r\n");
+			return ;
+		}
+
+		SendToClient(client.GetFd(), ":server 341 " + client.GetNickname() + " " + targetNick + " " + chanName + "\r\n");
+		SendToClient(targetClient->GetFd(), ":" + client.GetNickname() + "!" + client.GetUsername() + "@" + client.GetIpAddress() + " INVITE " + targetNick + " :" + chanName + "\r\n");
+	} else if ( command == "TOPIC" ) {
+		if ( tokens.size() < 2 ) {
+			SendToClient(client.GetFd(), ":server 461 " + client.GetNickname() + " TOPIC :Not enough parameters\r\n");
+			return ;
+		}
+		std::string chanName = tokens[1];
+		Channel* channel = FindChannel( chanName );
+		if ( channel == NULL ) {
+			SendToClient(client.GetFd(), ":server 403 " + client.GetNickname() + " " + chanName + " :No such channel\r\n");
+			return ;
+		}
+		if ( !channel->HasMember( client.GetFd() ) ) {
+			SendToClient(client.GetFd(), ":server 442 " + client.GetNickname() + " " + chanName + " :You're not on that channel\r\n");
+			return ;
+		}
+
+		if ( tokens.size() == 2 ) {
+			if ( channel->GetTopic().empty() ) {
+				SendToClient(client.GetFd(), ":server 331 " + client.GetNickname() + " " + chanName + " :No topic is set\r\n");
+			} else {
+				SendToClient(client.GetFd(), ":server 332 " + client.GetNickname() + " " + chanName + " :" + channel->GetTopic() + "\r\n");
+			}
+		} else {
+			if ( channel->IsTopicRestricted() && !channel->IsOperator( client.GetFd() ) ) {
+				SendToClient(client.GetFd(), ":server 482 " + client.GetNickname() + " " + chanName + " :You're not channel operator\r\n");
 				return ;
 			}
-			channel->RemoveMember(target->GetFd());
-			SendToClient(target->GetFd(), ":server KICK " + channel->GetName() + " " + target->GetNickname() + "\r\n");
-			RemoveEmptyChannel(channel->GetName());
+			std::string newTopic = JoinFrom(tokens, 2);
+			if ( StartsWith(newTopic, ":") ) {
+				newTopic = newTopic.substr(1);
+			}
+			channel->SetTopic( newTopic );
+			std::string topicMsg = ":" + client.GetNickname() + "!" + client.GetUsername() + "@" + client.GetIpAddress() + " TOPIC " + chanName + " :" + newTopic + "\r\n";
+			BroadcastToChannel(*channel, topicMsg, -1);
 		}
 	} else if ( command == "MODE" ) {
-		if ( tokens.size() < 3 ) {
+		if ( tokens.size() < 2 ) {
+			SendToClient(client.GetFd(), ":server 461 " + client.GetNickname() + " MODE :Not enough parameters\r\n");
 			return ;
 		}
-		Channel *channel = FindChannel(tokens[1]);
-		if ( channel == NULL ) {
-			return ;
+		std::string target = tokens[1];
+		if ( target[0] == '#' ) {
+			Channel* channel = FindChannel( target );
+			if ( channel == NULL ) {
+				SendToClient(client.GetFd(), ":server 403 " + client.GetNickname() + " " + target + " :No such channel\r\n");
+				return ;
+			}
+			if ( tokens.size() == 2 ) {
+				std::string modes = "+";
+				if ( channel->IsInviteOnly() ) {
+					modes += "i";
+				}
+				if ( channel->IsTopicRestricted() ) {
+					modes += "t";
+				}
+				if ( !channel->GetKey().empty() ) {
+					modes += "k";
+				}
+				if ( channel->HasUserLimit() ) {
+					modes += "l";
+				}
+				SendToClient(client.GetFd(), ":server 324 " + client.GetNickname() + " " + target + " " + modes + "\r\n");
+				return ;
+			}
+
+			if ( !channel->IsOperator( client.GetFd() ) ) {
+				SendToClient(client.GetFd(), ":server 482 " + client.GetNickname() + " " + target + " :You're not channel operator\r\n");
+				return ;
+			}
+
+			std::string mode = tokens[2];
+			if ( mode == "+i" ) {
+				channel->SetInviteOnly( true );
+			} else if ( mode == "-i" ) {
+				channel->SetInviteOnly( false );
+			} else if ( mode == "+t" ) {
+				channel->SetTopicRestricted( true );
+			} else if ( mode == "-t" ) {
+				channel->SetTopicRestricted( false );
+			} else if ( mode == "+k" && tokens.size() >= 4 ) {
+				channel->SetKey( tokens[3] );
+			} else if ( mode == "-k" ) {
+				channel->SetKey( "" );
+			} else if ( mode == "+o" && tokens.size() >= 4 ) {
+				Client* targetClient = FindClientByNick( tokens[3] );
+				if ( targetClient != NULL && channel->HasMember( targetClient->GetFd() ) ) {
+					channel->AddOperator( targetClient->GetFd() );
+				}
+			} else if ( mode == "-o" && tokens.size() >= 4 ) {
+				Client* targetClient = FindClientByNick( tokens[3] );
+				if ( targetClient != NULL && channel->HasMember( targetClient->GetFd() ) ) {
+					channel->RemoveOperator( targetClient->GetFd() );
+				}
+			} else if ( mode == "+l" && tokens.size() >= 4 ) {
+				channel->SetUserLimit( ::atoi(tokens[3].c_str()) );
+			} else if ( mode == "-l" ) {
+				channel->RemoveUserLimit();
+			} else {
+				return ;
+			}
+
+			std::string modeMsg = ":" + client.GetNickname() + "!" + client.GetUsername() + "@" + client.GetIpAddress() + " MODE " + target + " " + mode;
+			if ( tokens.size() >= 4 ) {
+				modeMsg += " " + tokens[3];
+			}
+			modeMsg += "\r\n";
+			BroadcastToChannel(*channel, modeMsg, -1);
 		}
-		if ( !channel->IsOperator(client.GetFd()) ) {
-			SendToClient(client.GetFd(), ":server 482 " + client.GetNickname() + " " + channel->GetName() + " :You're not channel operator\r\n");
-			return ;
+	} else if ( command == "QUIT" ) {
+		std::string reason = tokens.size() > 1 ? JoinFrom(tokens, 1) : "Client Quit";
+		if ( StartsWith(reason, ":") ) {
+			reason = reason.substr(1);
 		}
-		std::string mode = tokens[2];
-		if ( mode == "+i" ) {
-			channel->SetInviteOnly(true);
-		}
-		if ( mode == "-i" ) {
-			channel->SetInviteOnly(false);
-		}
-		if ( mode == "+t" ) {
-			channel->SetTopicRestricted(true);
-		}
-		if ( mode == "-t" ) {
-			channel->SetTopicRestricted(false);
-		}
-		if ( mode == "+k" && tokens.size() >= 4 ) {
-			channel->SetKey(tokens[3]);
-		}
-		if ( mode == "-k" ) {
-			channel->SetKey("");
-		}
-		if ( mode == "+o" && tokens.size() >= 4 ) {
-			Client *target = FindClientByNick(tokens[3]);
-			if ( target != NULL ) {
-				channel->AddOperator(target->GetFd());
+
+		std::string quitMsg = ":" + client.GetNickname() + "!" + client.GetUsername() + "@" + client.GetIpAddress() + " QUIT :" + reason + "\r\n";
+		for ( size_t i = 0; i < channels.size(); ++i ) {
+			if ( channels[i].HasMember( client.GetFd() ) ) {
+				BroadcastToChannel(channels[i], quitMsg, client.GetFd());
+				channels[i].RemoveMember( client.GetFd() );
 			}
 		}
-		if ( mode == "-o" && tokens.size() >= 4 ) {
-			Client *target = FindClientByNick(tokens[3]);
-			if ( target != NULL ) {
-				channel->RemoveOperator(target->GetFd());
-			}
-		}
-		if ( mode == "+l" && tokens.size() >= 4 ) {
-			channel->SetUserLimit(::atoi(tokens[3].c_str()));
-		}
-		if ( mode == "-l" ) {
-			channel->RemoveUserLimit();
-		}
+
+		SendToClient(client.GetFd(), "ERROR :Closing Link: (" + client.GetUsername() + "@" + client.GetIpAddress() + ") [" + reason + "]\r\n");
+		ClearClients( client.GetFd() );
+		close( client.GetFd() );
+		return ;
+	} else {
+		std::string nick = client.GetNickname().empty() ? "*" : client.GetNickname();
+		SendToClient(client.GetFd(), ":server 421 " + nick + " " + command + " :Unknown command\r\n");
 	}
+
+	if ( !wasRegistered && client.IsRegistered() ) {
+		SendWelcomeMessages( client );
+	}
+}
+
+void Server::SendWelcomeMessages( Client& client ) {
+	std::string nick = client.GetNickname();
+	
+	SendToClient(client.GetFd(), ":server 001 " + nick + " :Welcome to the ft_irc Network, " + nick + "\r\n");
+	SendToClient(client.GetFd(), ":server 002 " + nick + " :Your host is server, running version 1.0\r\n");
+	SendToClient(client.GetFd(), ":server 003 " + nick + " :This server was created today\r\n");
+	SendToClient(client.GetFd(), ":server 004 " + nick + " :server 1.0 i t k o l\r\n");
+	
+	// Простейшая реализация MOTD
+	SendToClient(client.GetFd(), ":server 375 " + nick + " :- server Message of the day - \r\n");
+	SendToClient(client.GetFd(), ":server 372 " + nick + " :- Welcome to 42 IRC Server!\r\n");
+	SendToClient(client.GetFd(), ":server 372 " + nick + " :- Please respect other users.\r\n");
+	SendToClient(client.GetFd(), ":server 376 " + nick + " :End of /MOTD command.\r\n");
 }
 
 void Server::ReceiveNewData( int fd ) {
