@@ -6,7 +6,7 @@
 /*   By: danslav1e <danslav1e@student.42.fr>        +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 20:46:27 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/07/23 23:40:39 by danslav1e        ###   ########.fr       */
+/*   Updated: 2026/07/23 23:51:00 by danslav1e        ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -348,6 +348,9 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 			return ;
 		}
 		client.SetUsername( tokens[1] );
+		if ( StartsWith(tokens[4], ":") ) {
+			tokens[4] = tokens[4].substr(1);
+		}
 		client.SetRealname( JoinFrom(tokens, 4) );
 		client.SetUserAccepted( true );
 	} else if ( !client.IsRegistered() ) {
@@ -355,7 +358,7 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 		return ;
 	} else if ( command == "PING" ) {
 		if ( tokens.size() < 2 ) {
-			SendToClient(client.GetFd(), ":server 461 " + client.GetNickname() + " PING :Not enough parameters\r\n");
+			SendToClient(client.GetFd(), ":server PONG server :" + tokens[1] + "\r\n");
 			return ;
 		}
 		SendToClient(client.GetFd(), "PONG " + tokens[1] + "\r\n");
@@ -644,6 +647,7 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 			} else if ( mode == "-l" ) {
 				channel->RemoveUserLimit();
 			} else {
+				SendToClient(client.GetFd(), ":server 472 " + mode + " :Unknown mode\r\n");
 				return ;
 			}
 

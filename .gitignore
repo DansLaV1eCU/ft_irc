@@ -73,3 +73,5 @@ bircd/
 IRC_mediumArticle.pdf
 ircserv
 obj
+test.py
+compile_flags.txt
