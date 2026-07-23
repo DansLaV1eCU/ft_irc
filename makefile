@@ -23,12 +23,17 @@ $(foreach source,$(SRC),$(eval $(call build_object,$(patsubst %.cpp,$(OBJDIR)/%.
 $(OBJDIR):
 	mkdir -p $(OBJDIR)
 
+bonus:
+	$(MAKE) -C robotBonus
+
 clean:
 	rm -rf $(OBJDIR)
+	$(MAKE) -C robotBonus clean
 
 fclean: clean
 	rm -f $(NAME)
+	$(MAKE) -C robotBonus fclean
 
 re: fclean all
 
-.PHONY: all clean fclean re
+.PHONY: all clean fclean re bonus
