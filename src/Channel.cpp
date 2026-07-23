@@ -10,7 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "Channel.hpp"
+#include "../includes/Channel.hpp"
 
 Channel::Channel( void ) : _inviteOnly(false), _topicRestricted(false), _userLimit(0) {
 }

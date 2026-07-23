@@ -6,11 +6,11 @@
 /*   By: danslav1e <danslav1e@student.42.fr>        +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 20:46:27 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/07/23 23:51:00 by danslav1e        ###   ########.fr       */
+/*   Updated: 2026/07/24 00:46:19 by danslav1e        ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "Server.hpp"
+#include "../includes/Server.hpp"
 #include <cerrno>
 #include <cstdlib>
 #include <iostream>
@@ -60,12 +60,17 @@ bool StartsWith( const std::string &value, const std::string &prefix ) {
 }
 } // namespace
 
-Server::Server( void ) : _port(6667), _password("password"), _serverFd(-1) {}
+Server::Server( void ) : _port(6667), _password("password"), _serverFd(-1) {
+	
+}
 
-Server::Server( int port, const std::string &password )
-	: _port( port ), _password(password), _serverFd(-1) {}
+Server::Server( int port, const std::string &password ) : _port( port ), _password(password), _serverFd(-1) {
 
-Server::Server( const Server &other ) { *this = other; }
+}
+
+Server::Server( const Server &other ) {
+	*this = other;
+}
 
 Server &Server::operator=( const Server &other ) {
 	if ( this != &other ) {
@@ -85,9 +90,13 @@ Server::~Server( void ) {
 	CloseFds();
 }
 
-int Server::getServerFd( void ) const { return (_serverFd); }
+int Server::getServerFd( void ) const {
+	return (_serverFd);
+}
 
-int Server::getPort( void ) const { return (_port); }
+int Server::getPort( void ) const {
+	return (_port);
+}
 
 void Server::ServerInit( void ) {
 	SerSocket();

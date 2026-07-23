@@ -4,7 +4,7 @@ OBJDIR := obj
 CXX := c++
 CXXFLAGS := -Wall -Wextra -Werror -std=c++98 -Iincludes
 
-SRC := main.cpp src/Client.cpp src/Channel.cpp src/Server.cpp
+SRC := src/main.cpp src/Client.cpp src/Channel.cpp src/Server.cpp
 OBJ := $(SRC:%.cpp=$(OBJDIR)/%.o)
 
 all: $(NAME)

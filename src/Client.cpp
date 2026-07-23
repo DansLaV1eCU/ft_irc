@@ -10,7 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "Client.hpp"
+#include "../includes/Client.hpp"
 
 // Default constructor
 Client::Client( void ) : _fd(-1), _passAccepted(false), _nickAccepted(false), _userAccepted(false), _clientDisconnected( false ) {
