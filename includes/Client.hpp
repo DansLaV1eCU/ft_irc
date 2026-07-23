@@ -6,7 +6,7 @@
 /*   By: danslav1e <danslav1e@student.42.fr>        +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/06 22:26:31 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/07/20 20:51:52 by danslav1e        ###   ########.fr       */
+/*   Updated: 2026/07/23 22:21:09 by danslav1e        ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -40,6 +40,8 @@ class Client { //-> class for client
 		bool		_passAccepted; //-> PASS command accepted
 		bool		_nickAccepted; //-> NICK command accepted
 		bool		_userAccepted; //-> USER command accepted
+		bool		_clientDisconnected; //-> client connected state
+		std::string _outBuffer;
 
 	public:
 					Client( void ); //-> default constructor
@@ -50,6 +52,7 @@ class Client { //-> class for client
 		int 		GetFd( void ) const; //-> getter for fd
 		std::string GetIpAddress( void ) const; //-> getter for ip address
 		std::string GetBuffer( void ) const; //-> getter for input buffer
+		const std::string& GetOutBuffer( void ) const;
 		std::string GetNickname( void ) const; //-> getter for nickname
 		std::string GetUsername( void ) const; //-> getter for username
 		std::string GetRealname( void ) const; //-> getter for realname
@@ -57,6 +60,7 @@ class Client { //-> class for client
 		bool 		HasNickname( void ) const; //-> getter for NICK state
 		bool 		HasUsername( void ) const; //-> getter for USER state
 		bool 		IsRegistered( void ) const; //-> getter for registration state
+		bool 		IsDisconnected( void ) const; //-> getter for disconnected state
 
 		void 		SetFd( int fd ); //-> setter for fd
 		void 		setIpAdd( std::string ipAddress ); //-> setter for ipadd
@@ -68,6 +72,9 @@ class Client { //-> class for client
 		void 		SetPassAccepted( bool accepted ); //-> setter for PASS state
 		void 		SetNickAccepted( bool accepted ); //-> setter for NICK state
 		void 		SetUserAccepted( bool accepted ); //-> setter for USER state
+		void 		AppendOutBuffer( const std::string& data );
+        void 		EraseOutBuffer( size_t count );
+		void 		SetDisconnected( bool disconnected ); //-> setter for disconnected state
 };
 
 

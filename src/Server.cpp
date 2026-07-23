@@ -6,7 +6,7 @@
 /*   By: danslav1e <danslav1e@student.42.fr>        +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 20:46:27 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/07/22 21:47:49 by danslav1e        ###   ########.fr       */
+/*   Updated: 2026/07/23 23:40:39 by danslav1e        ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,6 +16,7 @@
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
+#include <cerrno>
 
 bool Server::Signal = false;
 
@@ -99,11 +100,73 @@ void Server::ServerInit( void ) {
 		}
 
 		for ( size_t i = 0; i < fds.size(); ++i ) {
+			if (fds[i].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+				int errorFd = fds[i].fd;
+
+				if (errorFd == _serverFd) {
+					throw ( std::runtime_error("Fatal error on server socket") );
+				}
+
+				std::cout << RED << "Client <" << errorFd << "> Disconnected (Error/Hangup)" << WHI << std::endl;
+
+				for (size_t j = 0; j < channels.size(); ++j) {
+					channels[j].RemoveMember(errorFd);
+				}
+				ClearClients(errorFd);
+				close(errorFd);
+				--i;
+				
+				continue;
+			}
 			if ( fds[i].revents & POLLIN ) {
 				if ( fds[i].fd == _serverFd ) {
 					AcceptNewClient();
 				} else {
+					size_t len_before = clients.size();
 					ReceiveNewData(fds[i].fd);
+					size_t len_after = clients.size();
+					if (len_before != len_after) {
+						i--;
+					}
+				}
+			}
+
+			if ( fds[i].revents & POLLOUT ) {
+				Client* client = FindClientByFd(fds[i].fd);
+				if ( client != NULL && !client->GetOutBuffer().empty() ) {
+					const std::string& outMsg = client->GetOutBuffer();
+					ssize_t bytesSent = send(fds[i].fd, outMsg.c_str(), outMsg.size(), 0);
+					
+					if ( bytesSent > 0 ) {
+						client->EraseOutBuffer(bytesSent);
+						if ( client->GetOutBuffer().empty() ) {
+							fds[i].events &= ~POLLOUT;
+						}
+					} else if ( bytesSent == -1 && errno != EAGAIN && errno != EWOULDBLOCK ) {
+						std::cout << RED << "Client <" << fds[i].fd << "> Disconnected (Error/Hangup)" << WHI << std::endl;
+						for (size_t j = 0; j < channels.size(); ++j) {
+							channels[j].RemoveMember(fds[i].fd);
+						}
+						ClearClients(fds[i].fd);
+						close(fds[i].fd);
+						--i;
+					}
+				}
+			}
+
+			Client* client = FindClientByFd(fds[i].fd);
+			if ( client != NULL && client->IsDisconnected() ) {
+				if ( client->GetOutBuffer().empty() ) {
+					int fd_to_close = fds[i].fd;
+					
+					for ( size_t j = 0; j < channels.size(); ++j ) {
+						channels[j].RemoveMember(fd_to_close);
+					}
+					
+					ClearClients(fd_to_close);
+					close(fd_to_close);
+					--i;
+					continue;
 				}
 			}
 		}
@@ -219,7 +282,16 @@ void Server::RemoveEmptyChannel( const std::string &name ) {
 }
 
 void Server::SendToClient( int fd, const std::string &message ) {
-	send(fd, message.c_str(), message.size(), 0);
+	Client* client = FindClientByFd(fd);
+	if (client != NULL) {
+		client->AppendOutBuffer(message);
+		for ( size_t i = 0; i < fds.size(); ++i ) {
+			if ( fds[i].fd == fd ) {
+				fds[i].events |= POLLOUT;
+				break;
+			}
+		}
+	}
 }
 
 void Server::BroadcastToChannel( Channel &channel, const std::string &message, int exceptFd ) {
@@ -495,7 +567,8 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 			} else {
 				SendToClient(client.GetFd(), ":server 332 " + client.GetNickname() + " " + chanName + " :" + channel->GetTopic() + "\r\n");
 			}
-		} else {
+		} 
+		else {
 			if ( channel->IsTopicRestricted() && !channel->IsOperator( client.GetFd() ) ) {
 				SendToClient(client.GetFd(), ":server 482 " + client.GetNickname() + " " + chanName + " :You're not channel operator\r\n");
 				return ;
@@ -588,16 +661,41 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 		}
 
 		std::string quitMsg = ":" + client.GetNickname() + "!" + client.GetUsername() + "@" + client.GetIpAddress() + " QUIT :" + reason + "\r\n";
+		std::vector<int> fdsToNotify;
+
+		// 1. Собираем уникальные дескрипторы (fd) всех, кто должен увидеть выход
 		for ( size_t i = 0; i < channels.size(); ++i ) {
 			if ( channels[i].HasMember( client.GetFd() ) ) {
-				BroadcastToChannel(channels[i], quitMsg, client.GetFd());
-				channels[i].RemoveMember( client.GetFd() );
+				const std::vector<int>& members = channels[i].GetMembers();
+				
+				for ( size_t j = 0; j < members.size(); ++j ) {
+					int targetFd = members[j];
+					
+					if ( targetFd != client.GetFd() ) {
+						bool alreadyAdded = false;
+						
+						for ( size_t k = 0; k < fdsToNotify.size(); ++k ) {
+							if ( fdsToNotify[k] == targetFd ) {
+								alreadyAdded = true;
+								break;
+							}
+						}
+						
+						if ( !alreadyAdded ) {
+							fdsToNotify.push_back( targetFd );
+						}
+					}
+				}
 			}
 		}
 
+		for ( size_t i = 0; i < fdsToNotify.size(); ++i ) {
+			SendToClient(fdsToNotify[i], quitMsg);
+		}
+
 		SendToClient(client.GetFd(), "ERROR :Closing Link: (" + client.GetUsername() + "@" + client.GetIpAddress() + ") [" + reason + "]\r\n");
-		ClearClients( client.GetFd() );
-		close( client.GetFd() );
+		client.SetDisconnected( true );
+		
 		return ;
 	} else {
 		std::string nick = client.GetNickname().empty() ? "*" : client.GetNickname();
@@ -648,11 +746,25 @@ void Server::ReceiveNewData( int fd ) {
 	}
 
 	buff[bytes] = '\0';
+	if ( client->GetBuffer().size() + bytes > 1024 ) {
+        std::cout << RED << "Client <" << fd << "> Disconnected: Buffer overflow (DoS protection)" << WHI << std::endl;
+        
+        for ( size_t i = 0; i < channels.size(); ++i ) {
+            channels[i].RemoveMember(fd);
+        }
+        ClearClients(fd);
+        close(fd);
+        return ;
+    }
+	
 	std::string buffer = client->GetBuffer();
 	buffer += buff;
 
 	std::string::size_type pos = 0;
 	while ( (pos = buffer.find('\n')) != std::string::npos ) {
+		if ( client->IsDisconnected() ) {
+        	break; 
+    	}
 		std::string line = buffer.substr(0, pos + 1);
 		ProcessLine(*client, line);
 		buffer = buffer.substr(pos + 1);

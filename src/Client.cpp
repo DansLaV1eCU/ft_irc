@@ -6,14 +6,14 @@
 /*   By: danslav1e <danslav1e@student.42.fr>        +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/06 22:29:41 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/07/20 19:30:49 by danslav1e        ###   ########.fr       */
+/*   Updated: 2026/07/23 22:29:36 by danslav1e        ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "Client.hpp"
 
 // Default constructor
-Client::Client( void ) : _fd(-1), _passAccepted(false), _nickAccepted(false), _userAccepted(false) {
+Client::Client( void ) : _fd(-1), _passAccepted(false), _nickAccepted(false), _userAccepted(false), _clientDisconnected( false ) {
 }
 
 // Copy constructor
@@ -119,4 +119,24 @@ void Client::SetNickAccepted( bool accepted ) {
 
 void Client::SetUserAccepted( bool accepted ) {
 	this->_userAccepted = accepted;
+}
+
+const std::string& Client::GetOutBuffer( void ) const { 
+	return ( this->_outBuffer ); 
+}
+
+void Client::AppendOutBuffer( const std::string& data ) {
+	this->_outBuffer += data;
+}
+
+void Client::EraseOutBuffer( size_t count ) {
+	this->_outBuffer.erase(0, count);
+}
+
+bool Client::IsDisconnected( void ) const {
+	return ( this->_clientDisconnected );
+}
+
+void Client::SetDisconnected( bool disconnected ) {
+	this->_clientDisconnected = disconnected;
 }
