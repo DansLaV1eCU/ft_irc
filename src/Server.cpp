@@ -6,7 +6,7 @@
 /*   By: danslav1e <danslav1e@student.42.fr>        +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 20:46:27 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/08/24 15:39:21 by danslav1e        ###   ########.fr       */
+/*   Updated: 2026/08/24 16:14:30 by danslav1e        ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -370,7 +370,31 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 	} else if ( !client.IsRegistered() ) {
 		SendToClient(client.GetFd(), ":server 451 * :You have not registered\r\n");
 		return ;
-	} else if ( command == "PING" ) {
+	} else if ( command == "NAMES" ) {
+		if ( tokens.size() > 1 ) {
+			std::string chanName = tokens[1];
+			Channel* channel = FindChannel( chanName );
+			if ( channel != NULL ) {
+				std::string namesList = "";
+				const std::vector<int>& members = channel->GetMembers();
+				for ( size_t i = 0; i < members.size(); ++i ) {
+					Client* memberClient = FindClientByFd( members[i] );
+					if ( memberClient != NULL ) {
+						if ( i > 0 ) {
+							namesList += " ";
+						}
+						if ( channel->IsOperator( members[i] ) ) {
+							namesList += "@";
+						}
+						namesList += memberClient->GetNickname();
+					}
+				}
+				SendToClient(client.GetFd(), ":server 353 " + client.GetNickname() + " = " + chanName + " :" + namesList + "\r\n");
+				SendToClient(client.GetFd(), ":server 366 " + client.GetNickname() + " " + chanName + " :End of /NAMES list.\r\n");
+			}
+		}
+	}
+	else if ( command == "PING" ) {
 		if ( tokens.size() < 2 ) {
 			std::string nick = client.GetNickname().empty() ? "*" : client.GetNickname();
 			SendToClient(client.GetFd(), ":server 461 " + nick + " PING :Not enough parameters\r\n");
