@@ -6,7 +6,7 @@
 /*   By: danslav1e <danslav1e@student.42.fr>        +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/06 22:29:41 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/07/23 22:29:36 by danslav1e        ###   ########.fr       */
+/*   Updated: 2026/08/24 16:48:55 by danslav1e        ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -33,6 +33,8 @@ Client& Client::operator=( const Client& other ) {
 		this->_passAccepted = other._passAccepted;
 		this->_nickAccepted = other._nickAccepted;
 		this->_userAccepted = other._userAccepted;
+		this->_outBuffer = other._outBuffer;
+		this->_clientDisconnected = other._clientDisconnected;
 	}
 	return ( *this );
 }

@@ -6,7 +6,7 @@
 /*   By: danslav1e <danslav1e@student.42.fr>        +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 20:46:27 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/08/24 16:14:30 by danslav1e        ###   ########.fr       */
+/*   Updated: 2026/08/24 16:38:22 by danslav1e        ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -367,6 +367,7 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 		}
 		client.SetRealname( JoinFrom(tokens, 4) );
 		client.SetUserAccepted( true );
+		SendToClient(client.GetFd(), ":server 001 " + client.GetNickname() + " :Welcome to the IRC server\r\n");
 	} else if ( !client.IsRegistered() ) {
 		SendToClient(client.GetFd(), ":server 451 * :You have not registered\r\n");
 		return ;
