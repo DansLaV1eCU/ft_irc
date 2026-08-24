@@ -6,7 +6,7 @@
 /*   By: danslav1e <danslav1e@student.42.fr>        +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 20:46:27 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/07/24 00:46:19 by danslav1e        ###   ########.fr       */
+/*   Updated: 2026/08/24 15:39:21 by danslav1e        ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -35,11 +35,12 @@ std::vector<std::string> SplitWords( const std::string &line ) {
 }
 
 std::string TrimCarriageReturn( const std::string &line ) {
-	if ( !line.empty() && line[line.size() - 1] == '\r' ) {
-		return ( line.substr(0, line.size() - 1) );
-	}
+	std::string result = line;
 
-	return ( line );
+	while ( !result.empty() && (result[result.size() - 1] == '\n' || result[result.size() - 1] == '\r') ) {
+		result.erase(result.size() - 1);
+	}
+	return ( result );
 }
 
 std::string JoinFrom( const std::vector<std::string> &tokens, size_t start ) {
@@ -330,6 +331,10 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 	std::string command = tokens[0];
 	bool wasRegistered = client.IsRegistered();
 
+	if ( command == "CAP" ) {
+		return ;
+	}
+
 	if ( command == "PASS" ) {
 		if ( tokens.size() < 2 ) {
 			SendToClient(client.GetFd(), ":server 461 * PASS :Not enough parameters\r\n");
@@ -367,7 +372,8 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 		return ;
 	} else if ( command == "PING" ) {
 		if ( tokens.size() < 2 ) {
-			SendToClient(client.GetFd(), ":server PONG server :" + tokens[1] + "\r\n");
+			std::string nick = client.GetNickname().empty() ? "*" : client.GetNickname();
+			SendToClient(client.GetFd(), ":server 461 " + nick + " PING :Not enough parameters\r\n");
 			return ;
 		}
 		SendToClient(client.GetFd(), "PONG " + tokens[1] + "\r\n");

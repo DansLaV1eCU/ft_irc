@@ -6,7 +6,7 @@
 /*   By: danslav1e <danslav1e@student.42.fr>        +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/05 22:58:47 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/08/24 14:42:16 by danslav1e        ###   ########.fr       */
+/*   Updated: 2026/08/24 14:45:37 by danslav1e        ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -52,12 +52,10 @@ int main( int argc, char **argv ) {
 		return ( 1 );
 	}
 
-	// Перехват сигналов завершения (Ctrl+C, Ctrl+\) для корректного вызова деструкторов
 	signal( SIGINT, Server::SignalHandler );
 	signal( SIGQUIT, Server::SignalHandler );
 	signal( SIGTERM, Server::SignalHandler );
 	signal( SIGHUP, Server::SignalHandler );
-	// Игнорирование SIGPIPE для предотвращения падения при отправке в закрытый сокет
 	signal( SIGPIPE, SIG_IGN );
 
 	int port = std::atoi(portStr.c_str());
