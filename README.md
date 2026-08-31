@@ -13,12 +13,21 @@ This implementation uses non-blocking sockets and `poll()` to manage multiple cl
 - `PASS`
 - `NICK`
 - `USER`
-- `JOIN`
-- `PRIVMSG`
+- `JOIN` (accepts comma lists: `JOIN #a,#b key1,key2`)
+- `PART` (accepts comma lists)
+- `PRIVMSG` (accepts comma-separated targets)
+- `NOTICE`
 - `TOPIC`
+- `NAMES`
 - `INVITE`
 - `KICK`
-- `MODE` with `+i`, `-i`, `+t`, `-t`, `+k`, `-k`, `+o`, `-o`, `+l`, `-l`
+- `MODE` with `+i`, `-i`, `+t`, `-t`, `+k`, `-k`, `+o`, `-o`, `+l`, `-l`,
+  including combined forms such as `MODE #chan +itk secret`
+- `PING` / `PONG`
+- `QUIT`
+- `CAP` (capability negotiation; no capabilities are offered)
+
+Nicknames, channel names and commands are case insensitive, as in RFC 1459.
 
 ## Instructions
 

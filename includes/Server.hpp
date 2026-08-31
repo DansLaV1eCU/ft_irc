@@ -22,7 +22,7 @@ class Server //-> class for server
 		int _port; //-> server port
 		std::string _password; //-> server password
 		int _serverFd; //-> server socket file descriptor
-		static bool Signal; //-> static boolean for signal
+		static volatile sig_atomic_t Signal; //-> set from the signal handler; sig_atomic_t is the only type safe to touch there
 		std::vector<Client> clients; //-> vector of clients
 		std::vector<Channel> channels; //-> vector of channels
 		std::vector<struct pollfd> fds; //-> vector of pollfd
@@ -55,8 +55,16 @@ class Server //-> class for server
 		void SendToClient( int fd, const std::string& message );
 		void BroadcastToChannel( Channel& channel, const std::string& message, int exceptFd );
 		void ProcessLine( Client& client, const std::string& line );
-		void MaybeRegisterClient( Client& client );
 		void SendWelcomeMessages( Client& client );
+		void BroadcastToPeers( Client& client, const std::string& message );
+		void ApplyChannelModes( Client& client, Channel& channel, const std::vector<std::string>& tokens );
+		void RenameInvites( const std::string& oldNick, const std::string& newNick );
+		void RemoveAllEmptyChannels( void );
+		void DisconnectClient( int fd, const std::string& reason );
+		void JoinOneChannel( Client& client, const std::string& chanName, const std::string& key );
+		void PartOneChannel( Client& client, const std::string& chanName, const std::string& reason );
+		void DeliverMessage( Client& client, const std::string& target, const std::string& message, bool isNotice );
+		std::string BuildNamesList( Channel& channel );
 };
 
 #endif

@@ -1,6 +1,11 @@
 # Prerequisites
 *.d
 
+# Generated files
+*.md
+
+./tests/*
+
 # Compiled Object files
 *.slo
 *.lo
@@ -48,7 +53,6 @@ build-*/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
-Makefile
 install_manifest.txt
 compile_commands.json
 
@@ -72,6 +76,7 @@ bircd/
 .vscode/
 IRC_mediumArticle.pdf
 ircserv
+robotBonus/modbot
 obj
 test.py
 compile_flags.txt

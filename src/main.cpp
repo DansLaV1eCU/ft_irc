@@ -11,6 +11,7 @@
 /* ************************************************************************** */
 
 #include "../includes/Server.hpp"
+#include <cctype>
 #include <cstdlib>
 #include <iostream>
 #include <csignal>
@@ -22,14 +23,21 @@ static bool IsValidPort( const std::string& portStr ) {
 		return ( false );
 	}
 	for ( size_t i = 0; i < portStr.length(); ++i ) {
-		if ( !std::isdigit(portStr[i]) ) {
+		// isdigit() takes an int that must be representable as unsigned char;
+		// passing a plain (possibly negative) char is undefined behaviour.
+		if ( !std::isdigit( static_cast<unsigned char>(portStr[i]) ) ) {
 			return ( false );
 		}
 	}
 
-	long port;
+	// "99999999999999999999" overflows: the extraction fails and, in C++98,
+	// leaves 'port' untouched -- reading it uninitialised would be undefined.
+	long port = 0;
 	std::istringstream stream(portStr);
-	stream >> port;
+
+	if ( !(stream >> port) ) {
+		return ( false );
+	}
 
 	return ( port > 0 && port <= 65535 );
 }
