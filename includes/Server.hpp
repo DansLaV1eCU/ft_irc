@@ -49,6 +49,7 @@ class Server //-> class for server
 
 	private:
 		Client* FindClientByFd( int fd );
+		size_t CountRegisteredClients( void ) const;
 		Client* FindClientByNick( const std::string& nickname );
 		Channel* FindChannel( const std::string& name );
 		void RemoveEmptyChannel( const std::string& name );

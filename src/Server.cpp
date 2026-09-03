@@ -6,7 +6,7 @@
 /*   By: dtereshc <dtereshc@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 20:46:27 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/08/30 19:55:09 by dtereshc         ###   ########.fr       */
+/*   Updated: 2026/09/03 14:11:43 by dtereshc         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -360,8 +360,25 @@ void Server::AcceptNewClient( void ) {
 	clients.push_back(cli);
 	fds.push_back(newPoll);
 
-	std::cout << GRE << "Client <" << incofd << "> Connected -- "
-			  << clients.size() << " client(s) online" << WHI << std::endl;
+	// Nothing is printed here on purpose. accept() only means a TCP socket
+	// exists -- the peer has not sent PASS/NICK/USER yet and may never do so.
+	// Announcing it as a "connected client" would count raw sockets, wrong
+	// passwords and port scans alike. The client is announced once it is
+	// actually registered, in ProcessLine().
+}
+
+// How many clients completed PASS + NICK + USER. This is what "online" means
+// everywhere in the server's output -- not the number of open sockets.
+size_t Server::CountRegisteredClients( void ) const {
+	size_t total = 0;
+
+	for ( size_t i = 0; i < clients.size(); ++i ) {
+		if ( clients[i].IsRegistered() ) {
+			++total;
+		}
+	}
+
+	return ( total );
 }
 
 Client *Server::FindClientByFd( int fd ) {
@@ -738,6 +755,30 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 				+ ( channel != NULL ? channel->GetName() : chanName ) + " :End of /NAMES list.\r\n");
 		}
 	}
+	// irssi sends "WHO #chan" right after every JOIN and will not consider the
+	// channel synced until it gets an answer; unanswered, it just times out.
+	else if ( command == "WHO" ) {
+		std::string chanName = tokens.size() > 1 ? tokens[1] : std::string();
+		Channel* channel = chanName.empty() ? NULL : FindChannel( chanName );
+
+		if ( channel != NULL ) {
+			const std::vector<int> &members = channel->GetMembers();
+
+			for ( size_t i = 0; i < members.size(); ++i ) {
+				Client* member = FindClientByFd( members[i] );
+
+				if ( member == NULL ) {
+					continue ;
+				}
+				std::string flags = channel->IsOperator( members[i] ) ? "H@" : "H";
+				SendToClient(client.GetFd(), ":server 352 " + client.GetNickname() + " " + channel->GetName() + " "
+					+ member->GetUsername() + " " + member->GetIpAddress() + " server " + member->GetNickname()
+					+ " " + flags + " :0 " + member->GetRealname() + "\r\n");
+			}
+		}
+		SendToClient(client.GetFd(), ":server 315 " + client.GetNickname() + " "
+			+ ( chanName.empty() ? "*" : chanName ) + " :End of /WHO list.\r\n");
+	}
 	else if ( command == "JOIN" ) {
 		if ( tokens.size() < 2 ) {
 			SendToClient(client.GetFd(), ":server 461 " + client.GetNickname() + " JOIN :Not enough parameters\r\n");
@@ -926,28 +967,57 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 			return ;
 		}
 
-		if ( tokens.size() == 2 ) {
-			std::string modes = "+";
-			std::string args = "";
+		// A mode string with no '+'/'-' is a READ-ONLY query (e.g. "MODE #chan b"
+		// asks for the ban list), not a change -- it must never require operator
+		// rights. Only tokens.size()==2 used to count as a query, so any longer
+		// query (list requests included) fell through to the operator check below
+		// and got a wrong 482.
+		std::string modeArg = tokens.size() > 2 ? tokens[2] : std::string();
+		bool hasSign = ( modeArg.find('+') != std::string::npos || modeArg.find('-') != std::string::npos );
 
-			if ( channel->IsInviteOnly() ) {
-				modes += "i";
+		if ( tokens.size() == 2 || !hasSign ) {
+			bool answered = false;
+
+			// b/e/I are list-type queries; this server keeps no ban, exception or
+			// invite-exception lists, so the list is always empty -- only the
+			// "end of list" numeric is sent, same as any real server with nothing
+			// stored under that letter.
+			if ( modeArg.find('b') != std::string::npos ) {
+				SendToClient(client.GetFd(), ":server 368 " + client.GetNickname() + " " + channel->GetName() + " :End of channel ban list\r\n");
+				answered = true;
 			}
-			if ( channel->IsTopicRestricted() ) {
-				modes += "t";
+			if ( modeArg.find('e') != std::string::npos ) {
+				SendToClient(client.GetFd(), ":server 349 " + client.GetNickname() + " " + channel->GetName() + " :End of channel exception list\r\n");
+				answered = true;
 			}
-			if ( !channel->GetKey().empty() ) {
-				modes += "k";
-				// only members of the channel may learn the key
-				if ( channel->HasMember( client.GetFd() ) ) {
-					args += " " + channel->GetKey();
+			if ( modeArg.find('I') != std::string::npos ) {
+				SendToClient(client.GetFd(), ":server 347 " + client.GetNickname() + " " + channel->GetName() + " :End of channel invite list\r\n");
+				answered = true;
+			}
+
+			if ( !answered ) {
+				std::string modes = "+";
+				std::string args = "";
+
+				if ( channel->IsInviteOnly() ) {
+					modes += "i";
 				}
+				if ( channel->IsTopicRestricted() ) {
+					modes += "t";
+				}
+				if ( !channel->GetKey().empty() ) {
+					modes += "k";
+					// only members of the channel may learn the key
+					if ( channel->HasMember( client.GetFd() ) ) {
+						args += " " + channel->GetKey();
+					}
+				}
+				if ( channel->HasUserLimit() ) {
+					modes += "l";
+					args += " " + ToString( channel->GetUserLimit() );
+				}
+				SendToClient(client.GetFd(), ":server 324 " + client.GetNickname() + " " + channel->GetName() + " " + modes + args + "\r\n");
 			}
-			if ( channel->HasUserLimit() ) {
-				modes += "l";
-				args += " " + ToString( channel->GetUserLimit() );
-			}
-			SendToClient(client.GetFd(), ":server 324 " + client.GetNickname() + " " + channel->GetName() + " " + modes + args + "\r\n");
 			return ;
 		}
 
@@ -964,6 +1034,14 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 
 	if ( !wasRegistered && client.IsRegistered() ) {
 		SendWelcomeMessages( client );
+
+		// The client is only really "connected" now: password accepted, nickname
+		// and username set. This is the first and only place a connection is
+		// announced, so the count on screen always matches the users an
+		// evaluator can actually see and talk to.
+		std::cout << GRE << "Client <" << client.GetFd() << "> Connected as "
+				  << client.GetNickname() << " -- " << CountRegisteredClients()
+				  << " client(s) online" << WHI << std::endl;
 	}
 }
 
@@ -1140,6 +1218,14 @@ void Server::RemoveAllEmptyChannels( void ) {
 }
 
 void Server::DisconnectClient( int fd, const std::string &reason ) {
+	// Whether this connection was ever announced has to be read BEFORE
+	// ClearClients() erases it, so the disconnect line stays symmetrical with
+	// the connect line: a socket that never registered was never printed as
+	// connected, so it must not be printed as disconnected either.
+	Client* leaving = FindClientByFd( fd );
+	bool wasAnnounced = ( leaving != NULL && leaving->IsRegistered() );
+	std::string nick = ( leaving != NULL ) ? leaving->GetNickname() : std::string();
+
 	for ( size_t i = 0; i < channels.size(); ++i ) {
 		channels[i].RemoveMember( fd );
 	}
@@ -1148,11 +1234,15 @@ void Server::DisconnectClient( int fd, const std::string &reason ) {
 	ClearClients( fd );
 	close( fd );
 
-	std::cout << RED << "Client <" << fd << "> Disconnected";
+	if ( !wasAnnounced ) {
+		return ;
+	}
+
+	std::cout << RED << "Client <" << fd << "> (" << nick << ") Disconnected";
 	if ( !reason.empty() ) {
 		std::cout << " (" << reason << ")";
 	}
-	std::cout << " -- " << clients.size() << " client(s) online" << WHI << std::endl;
+	std::cout << " -- " << CountRegisteredClients() << " client(s) online" << WHI << std::endl;
 }
 
 void Server::CloseFds( void ) {
