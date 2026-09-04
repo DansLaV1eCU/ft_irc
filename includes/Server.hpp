@@ -1,51 +1,39 @@
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   Server.hpp                                         :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: danslav1e <danslav1e@student.42.fr>        +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/07/06 22:25:20 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/07/22 21:34:37 by danslav1e        ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
 #ifndef SERVER_HPP
 #define SERVER_HPP
 
 #include "Client.hpp"
 #include "Channel.hpp"
 
-class Server //-> class for server
+class Server
 {
 	private:
-		int _port; //-> server port
-		std::string _password; //-> server password
-		int _serverFd; //-> server socket file descriptor
-		static volatile sig_atomic_t Signal; //-> set from the signal handler; sig_atomic_t is the only type safe to touch there
-		std::vector<Client> clients; //-> vector of clients
-		std::vector<Channel> channels; //-> vector of channels
-		std::vector<struct pollfd> fds; //-> vector of pollfd
-		
+		int _port;
+		std::string _password;
+		int _serverFd;
+		static volatile sig_atomic_t Signal;
+		std::vector<Client> clients;
+		std::vector<Channel> channels;
+		std::vector<struct pollfd> fds;
+
 	public:
-		Server( void ); //-> default constructor
-		Server( int port, const std::string& password ); //-> configured constructor
-		Server( const Server& other ); //-> copy constructor
-		Server& operator=( const Server& other ); //-> copy assignment operator
-		~Server( void ); //-> destructor
-		
-		int getServerFd( void ) const; //-> get server socket file descriptor
-		int getPort( void ) const; //-> get server port
+		Server( void );
+		Server( int port, const std::string& password );
+		Server( const Server& other );
+		Server& operator=( const Server& other );
+		~Server( void );
 
-		void ServerInit( void ); //-> server initialization
-		void SerSocket( void ); //-> server socket creation
-		void AcceptNewClient( void ); //-> accept new client
-		void ReceiveNewData( int fd ); //-> receive new data from a registered client
+		int getServerFd( void ) const;
+		int getPort( void ) const;
 
-		static void SignalHandler( int signum ); //-> signal handler
-	
-		void CloseFds( void ); //-> close file descriptors
-		void ClearClients( int fd ); //-> clear clients
+		void ServerInit( void );
+		void SerSocket( void );
+		void AcceptNewClient( void );
+		void ReceiveNewData( int fd );
+
+		static void SignalHandler( int signum );
+
+		void CloseFds( void );
+		void ClearClients( int fd );
 
 	private:
 		Client* FindClientByFd( int fd );

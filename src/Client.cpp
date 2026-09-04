@@ -1,27 +1,12 @@
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   Client.cpp                                         :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: danslav1e <danslav1e@student.42.fr>        +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/07/06 22:29:41 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/08/24 16:48:55 by danslav1e        ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
 #include "../includes/Client.hpp"
 
-// Default constructor
 Client::Client( void ) : _fd(-1), _passAccepted(false), _nickAccepted(false), _userAccepted(false), _clientDisconnected( false ) {
 }
 
-// Copy constructor
 Client::Client( const Client& other ) {
 	*this = other;
 }
 
-// Copy assignment operator
 Client& Client::operator=( const Client& other ) {
 	if ( this != &other ) {
 		this->_fd = other._fd;
@@ -39,7 +24,6 @@ Client& Client::operator=( const Client& other ) {
 	return ( *this );
 }
 
-// Destructor
 Client::~Client( void ) {
 }
 
@@ -123,8 +107,8 @@ void Client::SetUserAccepted( bool accepted ) {
 	this->_userAccepted = accepted;
 }
 
-const std::string& Client::GetOutBuffer( void ) const { 
-	return ( this->_outBuffer ); 
+const std::string& Client::GetOutBuffer( void ) const {
+	return ( this->_outBuffer );
 }
 
 void Client::AppendOutBuffer( const std::string& data ) {

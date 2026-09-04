@@ -68,7 +68,32 @@ Example:
 ./ircserv 6667 12345
 ```
 
-Then connect using a reference IRC client such as Irssi, HexChat, or another standard IRC client.
+Then connect using a reference Irssi IRC client
+
+### Bonus
+
+The bonus part is a moderation bot. It is not built by `make`, build it with:
+
+```bash
+make bonus
+```
+
+The executable is named `robotBonus/modbot`. Run it against a running server:
+
+```bash
+./robotBonus/modbot <host> <port> <password> <#channel>
+```
+
+Example:
+
+```bash
+./robotBonus/modbot 127.0.0.1 6667 12345 '#42'
+```
+
+The bot joins the channel and watches for bad words. An offender is warned
+twice and kicked on the third offence. Kicking requires operator status, so
+give it to the bot with `/mode #42 +o ModBot`; without it the bot says in the
+channel that it cannot enforce the warnings.
 
 ## Resources
 
@@ -85,7 +110,7 @@ Then connect using a reference IRC client such as Irssi, HexChat, or another sta
 AI assistance was used to:
 
 - draft the README structure required by the subject,
-- summarize the current implementation and build workflow,
+- summarize and build workflow,
 - help phrase the instructions and resources section in clear English.
 
 The codebase itself was not generated from scratch by AI; the final content was reviewed and adjusted to match the project files and build commands.

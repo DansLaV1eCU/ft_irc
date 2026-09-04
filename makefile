@@ -23,6 +23,8 @@ $(foreach source,$(SRC),$(eval $(call build_object,$(patsubst %.cpp,$(OBJDIR)/%.
 $(OBJDIR):
 	mkdir -p $(OBJDIR)
 
+# Bonus part: the moderation bot in robotBonus/, built separately from the
+# mandatory part. Produces robotBonus/modbot.
 bonus:
 	$(MAKE) -C robotBonus
 

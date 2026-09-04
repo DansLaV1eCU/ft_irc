@@ -1,15 +1,3 @@
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   Server.cpp                                         :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: dtereshc <dtereshc@student.42.fr>          +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/07/20 20:46:27 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/09/03 14:11:43 by dtereshc         ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
 #include "../includes/Server.hpp"
 #include <cctype>
 #include <cerrno>
@@ -23,17 +11,11 @@ volatile sig_atomic_t Server::Signal = 0;
 
 namespace
 {
-// Splits an IRC line into its parameters.
-//
-// Everything after the first " :" is ONE parameter and is kept byte for byte,
-// spaces included -- that is where message text, topics and quit reasons live.
-// Splitting the whole line on whitespace (what this used to do) silently
-// collapsed "hello     world" into "hello world".
+
 std::vector<std::string> SplitParams( const std::string &line ) {
 	std::vector<std::string> tokens;
 	std::string rest = line;
 
-	// a message may carry a ":prefix" in front; clients normally do not send one
 	if ( !rest.empty() && rest[0] == ':' ) {
 		std::string::size_type space = rest.find(' ');
 
@@ -66,7 +48,6 @@ std::vector<std::string> SplitParams( const std::string &line ) {
 	return ( tokens );
 }
 
-// Splits "#a,#b,#c" on commas. Empty pieces are dropped.
 std::vector<std::string> SplitList( const std::string &value, char separator ) {
 	std::vector<std::string> items;
 	std::string current;
@@ -97,8 +78,6 @@ std::string ToUpper( const std::string &value ) {
 	return ( result );
 }
 
-// IRC nicknames, channel names and commands are all case insensitive:
-// "Bob" and "bob" are the same user, "#Chan" and "#chan" the same channel.
 bool EqualsIgnoreCase( const std::string &a, const std::string &b ) {
 	if ( a.size() != b.size() ) {
 		return ( false );
@@ -133,7 +112,6 @@ std::string JoinFrom( const std::vector<std::string> &tokens, size_t start ) {
 	return ( result );
 }
 
-// C++98 has no std::to_string
 std::string ToString( long value ) {
 	std::ostringstream stream;
 
@@ -141,8 +119,6 @@ std::string ToString( long value ) {
 	return ( stream.str() );
 }
 
-// A channel name is '#' followed by 1..49 characters, none of which may be a
-// space, a comma, a colon or a control character.
 bool IsValidChannelName( const std::string &name ) {
 	if ( name.size() < 2 || name.size() > 50 || name[0] != '#' ) {
 		return ( false );
@@ -157,8 +133,6 @@ bool IsValidChannelName( const std::string &name ) {
 	return ( true );
 }
 
-// RFC 2812: a nickname starts with a letter or one of []\`_^{|} and continues
-// with letters, digits, '-' or those same special characters.
 bool IsValidNickname( const std::string &nick ) {
 	const std::string special = "[]\\`_^{|}";
 
@@ -178,10 +152,10 @@ bool IsValidNickname( const std::string &nick ) {
 	}
 	return ( true );
 }
-} // namespace
+}
 
 Server::Server( void ) : _port(6667), _password("password"), _serverFd(-1) {
-	
+
 }
 
 Server::Server( int port, const std::string &password ) : _port( port ), _password(password), _serverFd(-1) {
@@ -267,7 +241,7 @@ void Server::ServerInit( void ) {
 				if ( client != NULL && !client->GetOutBuffer().empty() ) {
 					const std::string& outMsg = client->GetOutBuffer();
 					ssize_t bytesSent = send(fds[i].fd, outMsg.c_str(), outMsg.size(), 0);
-					
+
 					if ( bytesSent > 0 ) {
 						client->EraseOutBuffer(bytesSent);
 						if ( client->GetOutBuffer().empty() ) {
@@ -360,15 +334,8 @@ void Server::AcceptNewClient( void ) {
 	clients.push_back(cli);
 	fds.push_back(newPoll);
 
-	// Nothing is printed here on purpose. accept() only means a TCP socket
-	// exists -- the peer has not sent PASS/NICK/USER yet and may never do so.
-	// Announcing it as a "connected client" would count raw sockets, wrong
-	// passwords and port scans alike. The client is announced once it is
-	// actually registered, in ProcessLine().
 }
 
-// How many clients completed PASS + NICK + USER. This is what "online" means
-// everywhere in the server's output -- not the number of open sockets.
 size_t Server::CountRegisteredClients( void ) const {
 	size_t total = 0;
 
@@ -415,7 +382,7 @@ void Server::RemoveEmptyChannel( const std::string &name ) {
 	for ( size_t i = 0; i < channels.size(); ++i ) {
 		if ( EqualsIgnoreCase( channels[i].GetName(), name ) && channels[i].IsEmpty() ) {
 			channels.erase(channels.begin() + i);
-			
+
 			return ;
 		}
 	}
@@ -436,7 +403,7 @@ void Server::SendToClient( int fd, const std::string &message ) {
 
 void Server::BroadcastToChannel( Channel &channel, const std::string &message, int exceptFd ) {
 	const std::vector<int> &members = channel.GetMembers();
-	
+
 	for ( size_t i = 0; i < members.size(); ++i ) {
 		if ( members[i] != exceptFd ) {
 			SendToClient(members[i], message);
@@ -474,16 +441,11 @@ void Server::JoinOneChannel( Client &client, const std::string &chanName, const 
 
 	Channel* channel = FindChannel( chanName );
 
-	// Everything echoed back must use the channel's canonical name. Lookups are
-	// case insensitive, so a member who typed "#ROOM" would otherwise make every
-	// other member receive a channel name that matches none of their windows.
 	std::string realName = ( channel != NULL ) ? channel->GetName() : chanName;
 	std::string joinMsg = ":" + client.GetNickname() + "!" + client.GetUsername() + "@" + client.GetIpAddress() + " JOIN " + realName + "\r\n";
 
 	if ( channel == NULL ) {
-		// A brand new channel starts with no modes at all. Real servers ignore
-		// the key given on a JOIN that creates the channel -- setting +k here
-		// meant "/join #new whatever" silently locked the channel.
+
 		Channel newChan(chanName, client.GetFd());
 
 		channels.push_back( newChan );
@@ -563,7 +525,7 @@ void Server::DeliverMessage( Client &client, const std::string &target, const st
 			}
 			return ;
 		}
-		// canonical channel name, so every recipient can match it to their window
+
 		BroadcastToChannel(*channel, prefix + channel->GetName() + " :" + message + "\r\n", client.GetFd());
 		return ;
 	}
@@ -575,7 +537,7 @@ void Server::DeliverMessage( Client &client, const std::string &target, const st
 		}
 		return ;
 	}
-	// canonical nickname, not whatever capitalisation the sender typed
+
 	SendToClient(targetClient->GetFd(), prefix + targetClient->GetNickname() + " :" + message + "\r\n");
 }
 
@@ -632,8 +594,6 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 	bool wasRegistered = client.IsRegistered();
 	std::string replyNick = client.GetNickname().empty() ? "*" : client.GetNickname();
 
-	// Capability negotiation. We support no capabilities, but a client that asks
-	// must still get an answer -- silence makes strict clients wait forever.
 	if ( command == "CAP" ) {
 		if ( tokens.size() >= 2 ) {
 			std::string sub = ToUpper( tokens[1] );
@@ -649,13 +609,10 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 		return ;
 	}
 
-	// QUIT, PING and PONG must work before registration too: an unregistered
-	// client could not previously close its session cleanly, it only got 451.
 	if ( command == "QUIT" ) {
 		std::string reason = tokens.size() > 1 ? JoinFrom(tokens, 1) : "Client Quit";
 		std::string quitMsg = ":" + replyNick + "!" + client.GetUsername() + "@" + client.GetIpAddress() + " QUIT :" + reason + "\r\n";
 
-		// everyone sharing a channel with this client sees the QUIT exactly once
 		BroadcastToPeers( client, quitMsg );
 
 		SendToClient(client.GetFd(), "ERROR :Closing Link: (" + client.GetUsername() + "@" + client.GetIpAddress() + ") [" + reason + "]\r\n");
@@ -673,7 +630,6 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 		return ;
 	}
 
-	// a client answering our PING; nothing to do, but it is NOT an unknown command
 	if ( command == "PONG" ) {
 		return ;
 	}
@@ -705,8 +661,7 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 		}
 
 		Client* holder = FindClientByNick( newNick );
-		// The lookup is case insensitive, so "bob" -> "BOB" finds YOU. That is a
-		// legal rename (only the capitalisation changes), not a collision.
+
 		if ( holder == &client ) {
 			if ( client.GetNickname() == newNick ) {
 				return ;
@@ -720,8 +675,6 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 		client.SetNickname( newNick );
 		client.SetNickAccepted( true );
 
-		// A rename after registration has to be announced, or everyone else
-		// keeps talking to a nickname that no longer exists.
 		if ( wasRegistered ) {
 			std::string nickMsg = ":" + oldNick + "!" + client.GetUsername() + "@" + client.GetIpAddress() + " NICK :" + newNick + "\r\n";
 
@@ -755,8 +708,7 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 				+ ( channel != NULL ? channel->GetName() : chanName ) + " :End of /NAMES list.\r\n");
 		}
 	}
-	// irssi sends "WHO #chan" right after every JOIN and will not consider the
-	// channel synced until it gets an answer; unanswered, it just times out.
+
 	else if ( command == "WHO" ) {
 		std::string chanName = tokens.size() > 1 ? tokens[1] : std::string();
 		Channel* channel = chanName.empty() ? NULL : FindChannel( chanName );
@@ -785,8 +737,6 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 			return ;
 		}
 
-		// "JOIN #a,#b key1,key2" -- real clients send comma lists, the old code
-		// took the whole thing as ONE channel literally named "#a,#b".
 		std::vector<std::string> names = SplitList( tokens[1], ',' );
 		std::vector<std::string> keys = tokens.size() >= 3 ? SplitList( tokens[2], ',' ) : std::vector<std::string>();
 
@@ -808,8 +758,6 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 	} else if ( command == "PRIVMSG" || command == "NOTICE" ) {
 		bool isNotice = ( command == "NOTICE" );
 
-		// NOTICE must never generate an automatic reply (RFC 2812), otherwise two
-		// servers or a bot and a server can bounce errors at each other forever.
 		if ( tokens.size() < 2 ) {
 			if ( !isNotice ) {
 				SendToClient(client.GetFd(), ":server 411 " + client.GetNickname() + " :No recipient given (" + command + ")\r\n");
@@ -943,15 +891,11 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 		}
 		std::string target = tokens[1];
 
-		// "MODE :" parses to an EMPTY target; target[0] on an empty std::string
-		// is undefined behaviour in C++98.
 		if ( target.empty() ) {
 			SendToClient(client.GetFd(), ":server 461 " + client.GetNickname() + " MODE :Not enough parameters\r\n");
 			return ;
 		}
 
-		// A user mode query. Clients (irssi does it on every connect) send
-		// "MODE <ownnick> +i" and used to get no answer at all from us.
 		if ( target[0] != '#' ) {
 			if ( target != client.GetNickname() ) {
 				SendToClient(client.GetFd(), ":server 502 " + client.GetNickname() + " :Cannot change mode for other users\r\n");
@@ -967,21 +911,12 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 			return ;
 		}
 
-		// A mode string with no '+'/'-' is a READ-ONLY query (e.g. "MODE #chan b"
-		// asks for the ban list), not a change -- it must never require operator
-		// rights. Only tokens.size()==2 used to count as a query, so any longer
-		// query (list requests included) fell through to the operator check below
-		// and got a wrong 482.
 		std::string modeArg = tokens.size() > 2 ? tokens[2] : std::string();
 		bool hasSign = ( modeArg.find('+') != std::string::npos || modeArg.find('-') != std::string::npos );
 
 		if ( tokens.size() == 2 || !hasSign ) {
 			bool answered = false;
 
-			// b/e/I are list-type queries; this server keeps no ban, exception or
-			// invite-exception lists, so the list is always empty -- only the
-			// "end of list" numeric is sent, same as any real server with nothing
-			// stored under that letter.
 			if ( modeArg.find('b') != std::string::npos ) {
 				SendToClient(client.GetFd(), ":server 368 " + client.GetNickname() + " " + channel->GetName() + " :End of channel ban list\r\n");
 				answered = true;
@@ -1007,7 +942,7 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 				}
 				if ( !channel->GetKey().empty() ) {
 					modes += "k";
-					// only members of the channel may learn the key
+
 					if ( channel->HasMember( client.GetFd() ) ) {
 						args += " " + channel->GetKey();
 					}
@@ -1035,19 +970,12 @@ void Server::ProcessLine( Client& client, const std::string& line ) {
 	if ( !wasRegistered && client.IsRegistered() ) {
 		SendWelcomeMessages( client );
 
-		// The client is only really "connected" now: password accepted, nickname
-		// and username set. This is the first and only place a connection is
-		// announced, so the count on screen always matches the users an
-		// evaluator can actually see and talk to.
 		std::cout << GRE << "Client <" << client.GetFd() << "> Connected as "
 				  << client.GetNickname() << " -- " << CountRegisteredClients()
 				  << " client(s) online" << WHI << std::endl;
 	}
 }
 
-// Walks the mode string one character at a time so that combined forms such as
-// "MODE #chan +itk secret" or "MODE #chan +o-t bob" behave like a real server.
-// tokens[2] is the mode string; tokens[3..] are its arguments, consumed in order.
 void Server::ApplyChannelModes( Client &client, Channel &channel, const std::vector<std::string> &tokens ) {
 	const std::string &modeString = tokens[2];
 	std::string appliedModes;
@@ -1074,7 +1002,7 @@ void Server::ApplyChannelModes( Client &client, Channel &channel, const std::vec
 			}
 			arg = tokens[argIndex++];
 		} else if ( c == 'k' && argIndex < tokens.size() ) {
-			arg = tokens[argIndex++]; // "-k <key>" is what real clients send
+			arg = tokens[argIndex++];
 		}
 
 		bool applied = true;
@@ -1136,7 +1064,6 @@ void Server::ApplyChannelModes( Client &client, Channel &channel, const std::vec
 		}
 	}
 
-	// nothing valid was applied -> nothing to announce
 	if ( appliedModes.empty() ) {
 		return ;
 	}
@@ -1148,13 +1075,12 @@ void Server::ApplyChannelModes( Client &client, Channel &channel, const std::vec
 
 void Server::SendWelcomeMessages( Client& client ) {
 	std::string nick = client.GetNickname();
-	
+
 	SendToClient(client.GetFd(), ":server 001 " + nick + " :Welcome to the ft_irc Network, " + nick + "\r\n");
 	SendToClient(client.GetFd(), ":server 002 " + nick + " :Your host is server, running version 1.0\r\n");
 	SendToClient(client.GetFd(), ":server 003 " + nick + " :This server was created today\r\n");
 	SendToClient(client.GetFd(), ":server 004 " + nick + " server 1.0 i itkol\r\n");
 	SendToClient(client.GetFd(), ":server 005 " + nick + " CHANTYPES=# PREFIX=(o)@ CHANMODES=,k,l,it :are supported by this server\r\n");
-	
 
 	SendToClient(client.GetFd(), ":server 375 " + nick + " :- server Message of the day - \r\n");
 	SendToClient(client.GetFd(), ":server 372 " + nick + " :- Welcome to 42 IRC Server!\r\n");
@@ -1178,29 +1104,25 @@ void Server::ReceiveNewData( int fd ) {
 		return ;
 	}
 
-	buff[bytes] = '\0';
-	// A single IRC message may not exceed 512 bytes. Anything still unterminated
-	// past 1024 is either broken or hostile -- say so before closing, instead of
-	// dropping the connection with no explanation.
 	if ( client->GetBuffer().size() + bytes > 1024 ) {
 		SendToClient(fd, "ERROR :Closing Link: Input line was too long\r\n");
 		DisconnectClient(fd, "Input line too long");
 		return ;
 	}
-	
+
 	std::string buffer = client->GetBuffer();
-	buffer += buff;
+	buffer.append(buff, static_cast<size_t>(bytes));
 
 	std::string::size_type pos = 0;
 	while ( (pos = buffer.find('\n')) != std::string::npos ) {
 		if ( client->IsDisconnected() ) {
-        	break; 
+        	break;
     	}
 		std::string line = buffer.substr(0, pos + 1);
 		ProcessLine(*client, line);
 		buffer = buffer.substr(pos + 1);
 	}
-	
+
 	client->ClearBuffer();
 	client->AppendBuffer(buffer);
 }
@@ -1218,10 +1140,7 @@ void Server::RemoveAllEmptyChannels( void ) {
 }
 
 void Server::DisconnectClient( int fd, const std::string &reason ) {
-	// Whether this connection was ever announced has to be read BEFORE
-	// ClearClients() erases it, so the disconnect line stays symmetrical with
-	// the connect line: a socket that never registered was never printed as
-	// connected, so it must not be printed as disconnected either.
+
 	Client* leaving = FindClientByFd( fd );
 	bool wasAnnounced = ( leaving != NULL && leaving->IsRegistered() );
 	std::string nick = ( leaving != NULL ) ? leaving->GetNickname() : std::string();
@@ -1261,7 +1180,6 @@ void Server::ClearClients( int fd ) {
 		if ( clients[i].GetFd() == fd ) {
 			const std::string nick = clients[i].GetNickname();
 
-
 			if ( !nick.empty() ) {
 				for ( size_t j = 0; j < channels.size(); ++j ) {
 					channels[j].RemoveInvite( nick );
@@ -1284,9 +1202,8 @@ void Server::SignalHandler( int signum ) {
 
 	(void)signum;
 
-	// only async-signal-safe calls are allowed here: std::cout is not one
 	if ( write(STDOUT_FILENO, message, sizeof(message) - 1) == -1 ) {
-		// nothing sensible to do inside a signal handler
+
 	}
 	Server::Signal = 1;
 }

@@ -1,15 +1,3 @@
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   Channel.cpp                                        :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: danslav1e <danslav1e@student.42.fr>        +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/07/20 20:52:13 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/07/20 20:52:14 by danslav1e        ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
 #include "../includes/Channel.hpp"
 
 Channel::Channel( void ) : _inviteOnly(false), _topicRestricted(false), _userLimit(0) {

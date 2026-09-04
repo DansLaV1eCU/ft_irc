@@ -1,15 +1,3 @@
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   main.cpp                                           :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: danslav1e <danslav1e@student.42.fr>        +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/07/05 22:58:47 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/08/24 14:45:37 by danslav1e        ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
 #include "../includes/Server.hpp"
 #include <cctype>
 #include <cstdlib>
@@ -17,21 +5,17 @@
 #include <csignal>
 #include <sstream>
 
-// Проверка порта на соответствие RFC (1-65535) и отсутствие нечисловых символов
 static bool IsValidPort( const std::string& portStr ) {
 	if ( portStr.empty() ) {
 		return ( false );
 	}
 	for ( size_t i = 0; i < portStr.length(); ++i ) {
-		// isdigit() takes an int that must be representable as unsigned char;
-		// passing a plain (possibly negative) char is undefined behaviour.
+
 		if ( !std::isdigit( static_cast<unsigned char>(portStr[i]) ) ) {
 			return ( false );
 		}
 	}
 
-	// "99999999999999999999" overflows: the extraction fails and, in C++98,
-	// leaves 'port' untouched -- reading it uninitialised would be undefined.
 	long port = 0;
 	std::istringstream stream(portStr);
 

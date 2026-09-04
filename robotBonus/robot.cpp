@@ -1,15 +1,3 @@
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   robot.cpp                                          :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: danslav1e <danslav1e@student.42.fr>        +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/07/24 00:53:18 by danslav1e         #+#    #+#             */
-/*   Updated: 2026/07/24 00:53:19 by danslav1e        ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
 #include <iostream>
 #include <string>
 #include <map>
@@ -28,14 +16,12 @@
 
 std::string ToLower( std::string str ) {
 	for ( size_t i = 0; i < str.length(); ++i ) {
-		// tolower() takes an int representable as unsigned char; a plain char
-		// may be negative, which is undefined behaviour.
+
 		str[i] = static_cast<char>( std::tolower( static_cast<unsigned char>(str[i]) ) );
 	}
 	return ( str );
 }
 
-// Nicknames and channel names are case insensitive in IRC.
 bool EqualsIgnoreCase( const std::string& a, const std::string& b ) {
 	return ( ToLower(a) == ToLower(b) );
 }
@@ -53,8 +39,6 @@ bool ContainsBadWord( const std::string& message ) {
 	return ( false );
 }
 
-// send() may transmit fewer bytes than asked; the leftover has to be resent or
-// the command is silently truncated on the wire.
 bool SendData( int sock, const std::string& data ) {
 	size_t sent = 0;
 
@@ -69,7 +53,6 @@ bool SendData( int sock, const std::string& data ) {
 	return ( true );
 }
 
-// Resolves a hostname or a numeric address, so "localhost" works too.
 int ConnectTo( const std::string& host, const std::string& port ) {
 	struct addrinfo hints;
 	struct addrinfo* result = NULL;
@@ -100,11 +83,10 @@ int ConnectTo( const std::string& host, const std::string& port ) {
 	return ( sock );
 }
 
-// Splits ":nick!user@host COMMAND params :trailing" the same way the server does.
 struct Message {
-	std::string sender;                 // nickname from the prefix, empty if none
-	std::string command;                // uppercased
-	std::vector<std::string> params;    // trailing is the last element, verbatim
+	std::string sender;
+	std::string command;
+	std::vector<std::string> params;
 };
 
 Message ParseLine( const std::string& line ) {
@@ -227,13 +209,12 @@ int main( int argc, char **argv ) {
 				continue ;
 			}
 
-			// --- 001: registration is complete, only now may we JOIN ---
 			if ( msg.command == "001" ) {
 				registered = true;
 				SendData(sock, "JOIN " + channel + "\r\n");
 				continue ;
 			}
-			// --- 433: our nickname is taken, pick another and retry ---
+
 			if ( msg.command == "433" && !registered ) {
 				botName += "_";
 				if ( botName.length() > 20 ) {
@@ -245,13 +226,13 @@ int main( int argc, char **argv ) {
 				SendData(sock, "NICK " + botName + "\r\n");
 				continue ;
 			}
-			// --- 464/465: the server refused us outright ---
+
 			if ( msg.command == "464" ) {
 				std::cerr << "Error: password incorrect" << std::endl;
 				running = false;
 				continue ;
 			}
-			// --- 482: we tried to KICK without being a channel operator ---
+
 			if ( msg.command == "482" ) {
 				std::cerr << "Warning: " << botName << " is not a channel operator, cannot kick."
 						  << " Run \"/mode " << channel << " +o " << botName << "\" to enable kicking."
@@ -263,7 +244,7 @@ int main( int argc, char **argv ) {
 				}
 				continue ;
 			}
-			// --- 403/473/475/471: we could not enter the channel at all ---
+
 			if ( msg.command == "403" || msg.command == "473" || msg.command == "475" || msg.command == "471" ) {
 				std::cerr << "Error: cannot join " << channel << " ("
 						  << ( msg.params.empty() ? "" : msg.params[msg.params.size() - 1] ) << ")" << std::endl;
@@ -271,7 +252,6 @@ int main( int argc, char **argv ) {
 				continue ;
 			}
 
-			// --- someone renamed: carry their warning count over ---
 			if ( msg.command == "NICK" && !msg.params.empty() ) {
 				std::string oldNick = msg.sender;
 				std::string newNick = msg.params[0];
@@ -285,14 +265,12 @@ int main( int argc, char **argv ) {
 				continue ;
 			}
 
-			// --- we were removed from the channel ---
 			if ( msg.command == "KICK" && msg.params.size() >= 2 && EqualsIgnoreCase(msg.params[1], botName) ) {
 				std::cerr << "Kicked from " << channel << ", leaving." << std::endl;
 				running = false;
 				continue ;
 			}
 
-			// --- the actual job: moderate channel messages ---
 			if ( msg.command != "PRIVMSG" || msg.params.size() < 2 ) {
 				continue ;
 			}

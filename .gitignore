@@ -1,9 +1,5 @@
 # Prerequisites
 *.d
-
-# Generated files
-*.md
-
 ./tests/* 
 
 # Compiled Object files
